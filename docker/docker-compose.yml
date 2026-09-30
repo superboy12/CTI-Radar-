@@ -1,0 +1,49 @@
+version: "3.8"
+
+services:
+  # ── PostgreSQL Database ────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: cti-postgres
+    environment:
+      POSTGRES_DB: cti_db
+      POSTGRES_USER: cti_user
+      POSTGRES_PASSWORD: cti_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cti_user -d cti_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Backend API ────────────────────────────────────────────────
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: cti-backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://cti_user:cti_password@db:5432/cti_db
+      - APP_ENV=development
+      - APP_DEBUG=true
+      - JWT_SECRET_KEY=dev-secret-key-change-in-production
+      - FIRST_ADMIN_USERNAME=admin
+      - FIRST_ADMIN_EMAIL=admin@cti-platform.local
+      - FIRST_ADMIN_PASSWORD=Admin123!
+      - LOG_FORMAT=console
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../backend/app:/app/app
+      - ../ml:/app/../ml
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
