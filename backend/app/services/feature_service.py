@@ -33,6 +33,23 @@ class FeatureExtractionService:
         "rtp", "bonus", "maxwin", "pragmatic", "sbobet", "toto", "wismatoto"
     ]
 
+    # Kata kunci dinamis yang ditemukan secara otomatis oleh AI (TF-IDF)
+    # Diupdate setiap kali sibling_service menemukan pola baru
+    _dynamic_keywords: list = []
+
+    @classmethod
+    def update_dynamic_keywords(cls, new_keywords: list):
+        """Dipanggil oleh SiblingDetectionService untuk menambahkan keyword baru."""
+        existing = set(cls.SUSPICIOUS_KEYWORDS + cls._dynamic_keywords)
+        for kw in new_keywords:
+            if kw not in existing:
+                cls._dynamic_keywords.append(kw)
+
+    @property
+    def all_keywords(self) -> list:
+        """Gabungan kata kunci baseline + dinamis."""
+        return self.SUSPICIOUS_KEYWORDS + self._dynamic_keywords
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self.screenshots_dir = os.path.join(os.getcwd(), "screenshots")
@@ -107,6 +124,7 @@ class FeatureExtractionService:
         # Parse HTML
         try:
             soup = BeautifulSoup(content, "lxml")
+            soup_full = BeautifulSoup(content, "lxml")  # Salinan utuh untuk Deep Asset Scanning
             
             if soup.title:
                 features.title = soup.title.string.strip() if soup.title.string else None
@@ -125,7 +143,7 @@ class FeatureExtractionService:
 
             text_lower = text.lower()
             features.suspicious_keywords_found = [
-                kw for kw in self.SUSPICIOUS_KEYWORDS if kw in text_lower
+                kw for kw in self.all_keywords if kw in text_lower
             ]
 
             # Analyze Links
@@ -157,7 +175,107 @@ class FeatureExtractionService:
                     features.has_registration_form = True
                 elif len(inputs) > 3 and "email" in input_types and "password" in input_types:
                     features.has_registration_form = True
-                    
+
+            # ============================================================
+            # DEEP ASSET SCANNING — Membedah Seluruh Organ Situs Judi
+            # ============================================================
+            # Ekstrak SEMUA domain dari gambar, GIF, animasi, script,
+            # iframe, CSS, video, dan semua aset tersembunyi.
+            # ============================================================
+            
+            all_domains = set()
+            
+            def _extract_domain(url_str: str) -> str:
+                """Ekstrak domain murni dari URL apapun."""
+                if not url_str or url_str.startswith("data:") or url_str.startswith("javascript:"):
+                    return None
+                try:
+                    parsed = urlparse(url_str)
+                    host = parsed.netloc or parsed.path.split("/")[0]
+                    host = host.split(":")[0].lower().strip(".")
+                    # Abaikan jika bukan domain valid
+                    if "." in host and not host.replace(".", "").isdigit():
+                        # Abaikan domain sumber itu sendiri
+                        if domain_name not in host:
+                            return host
+                except:
+                    pass
+                return None
+
+            # 1. Gambar: <img src>, <img data-src> (lazy load), <picture><source>
+            for tag in soup_full.find_all(["img", "source"]):
+                for attr in ["src", "data-src", "data-lazy-src", "srcset"]:
+                    val = tag.get(attr, "")
+                    if val:
+                        # srcset bisa berisi banyak URL
+                        for part in val.split(","):
+                            url = part.strip().split(" ")[0]
+                            d = _extract_domain(url)
+                            if d:
+                                features.image_domains.append(d)
+                                all_domains.add(d)
+
+            # 2. Script: <script src>
+            for tag in soup_full.find_all("script", src=True):
+                d = _extract_domain(tag["src"])
+                if d:
+                    features.script_domains.append(d)
+                    all_domains.add(d)
+
+            # 3. Iframe: <iframe src> — Situs judi sering embed game lewat iframe
+            for tag in soup_full.find_all("iframe", src=True):
+                d = _extract_domain(tag["src"])
+                if d:
+                    features.iframe_domains.append(d)
+                    all_domains.add(d)
+
+            # 4. CSS/Stylesheet: <link rel="stylesheet" href>
+            for tag in soup_full.find_all("link", rel=True):
+                if "stylesheet" in " ".join(tag.get("rel", [])):
+                    d = _extract_domain(tag.get("href", ""))
+                    if d:
+                        features.css_domains.append(d)
+                        all_domains.add(d)
+
+            # 5. Media: <video>, <audio>, <source>
+            for tag in soup_full.find_all(["video", "audio"]):
+                for attr in ["src", "poster"]:
+                    d = _extract_domain(tag.get(attr, ""))
+                    if d:
+                        features.media_domains.append(d)
+                        all_domains.add(d)
+
+            # 6. CSS background-image: url(...) di inline style
+            for tag in soup_full.find_all(style=True):
+                style = tag["style"]
+                bg_urls = re.findall(r'url\(["\']?(https?://[^"\')\s]+)', style)
+                for url in bg_urls:
+                    d = _extract_domain(url)
+                    if d:
+                        features.image_domains.append(d)
+                        all_domains.add(d)
+
+            # 7. Link dari tag <a> yang mengarah ke domain external
+            for link in soup_full.find_all("a", href=True):
+                d = _extract_domain(link["href"])
+                if d:
+                    all_domains.add(d)
+
+            # Deduplikasi
+            features.image_domains = sorted(set(features.image_domains))[:50]
+            features.script_domains = sorted(set(features.script_domains))[:30]
+            features.iframe_domains = sorted(set(features.iframe_domains))[:20]
+            features.css_domains = sorted(set(features.css_domains))[:20]
+            features.media_domains = sorted(set(features.media_domains))[:20]
+            features.all_referenced_domains = sorted(all_domains)[:100]
+
+            logger.info("deep_asset_scan_complete",
+                        domain=domain_name,
+                        images=len(features.image_domains),
+                        scripts=len(features.script_domains),
+                        iframes=len(features.iframe_domains),
+                        total_domains=len(features.all_referenced_domains))
+
         except Exception as e:
             error_msg = f"Error parsing HTML: {str(e)}"
             logger.error("parse_failed", domain=domain_name, error=error_msg)

@@ -11,6 +11,7 @@ from app.api.v1.features import router as features_router
 from app.api.v1.ml import router as ml_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.mitigation import router as mitigation_router
+from app.api.v1.siblings import router as siblings_router
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -22,3 +23,5 @@ api_router.include_router(features_router)
 api_router.include_router(ml_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(mitigation_router)
+api_router.include_router(siblings_router)
+

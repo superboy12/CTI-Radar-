@@ -19,6 +19,15 @@ class WebsiteFeatures(BaseModel):
     server: Optional[str] = None
     status_code: Optional[int] = None
     redirect_url: Optional[str] = None
+    
+    # === ASET DOMAIN (Footprinting Otomatis) ===
+    # Domain dari gambar, GIF, animasi, script, iframe, video, dll.
+    image_domains: List[str] = []       # Domain dari <img src>, background-image
+    script_domains: List[str] = []      # Domain dari <script src>
+    iframe_domains: List[str] = []      # Domain dari <iframe src>
+    css_domains: List[str] = []         # Domain dari <link rel="stylesheet">
+    media_domains: List[str] = []       # Domain dari <video>, <source>, <audio>
+    all_referenced_domains: List[str] = []  # Gabungan semua domain unik yang ditemukan
 
 class FeatureExtractionResponse(BaseModel):
     """Response containing extracted features."""

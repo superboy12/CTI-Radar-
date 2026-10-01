@@ -41,8 +41,20 @@ def submit_to_ai(domain: str):
             return
             
         # 3. Eksekusi Stealth Scan & Machine Learning!
-        httpx.post(f"{BASE_URL}/domains/{domain_id}/features/extract", headers=headers, timeout=60.0)
+        r_extract = httpx.post(f"{BASE_URL}/domains/{domain_id}/features/extract", headers=headers, timeout=60.0)
         r_ml = httpx.post(f"{BASE_URL}/ml/predict/{domain_id}", headers=headers)
+        
+        # 3b. Auto-scan domain yang ditemukan dari aset halaman (gambar, script, iframe, dll)
+        if r_extract.status_code == 200:
+            try:
+                extracted_data = r_extract.json()
+                ref_domains = extracted_data.get("features", {}).get("all_referenced_domains", [])
+                if ref_domains:
+                    for ref_domain in ref_domains[:20]:  # Batasi 20 domain per halaman
+                        if ref_domain not in scanned_domains_cache:
+                            threading.Thread(target=submit_to_ai, args=(ref_domain,), daemon=True).start()
+            except Exception:
+                pass
         
         if r_ml.status_code == 200:
             hasil = r_ml.json()
@@ -55,6 +67,25 @@ def submit_to_ai(domain: str):
                 print(f"      📡 Target : {domain}")
                 print(f"      🛑 Vonis  : GAMBLING_INDICATED (Keyakinan: {conf}%)")
                 print(f"      🧱 Aksi   : Memblokir akses dari seluruh jaringan...")
+                
+                # 4. FOOTPRINTING: Buru seluruh keluarga domain judi ini!
+                try:
+                    r_hunt = httpx.post(f"{BASE_URL}/siblings/hunt/{domain_id}", headers=headers, timeout=30.0)
+                    if r_hunt.status_code == 200:
+                        hunt_data = r_hunt.json()
+                        siblings_flagged = hunt_data.get("siblings_flagged_suspicious", 0)
+                        new_kw = hunt_data.get("dynamic_keywords", {}).get("new_keywords_discovered", [])
+                        
+                        if siblings_flagged > 0:
+                            print(f"      🔗 Footprint: Ditemukan {siblings_flagged} domain SAUDARA!")
+                            for sib in hunt_data.get("flagged_siblings", [])[:5]:
+                                print(f"         ↳ {sib['domain']} (IP: {', '.join(sib.get('shared_ips', [])[:2])})")
+                        
+                        if new_kw:
+                            print(f"      🧠 Keyword : Ditemukan {len(new_kw)} kata kunci judi BARU: {', '.join(new_kw[:5])}")
+                except Exception:
+                    pass  # Footprinting gagal? Tidak apa-apa, domain utama sudah terblokir.
+                
                 print(f"=======================================================\n")
                 
     except Exception as e:
