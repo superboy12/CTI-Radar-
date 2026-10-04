@@ -13,13 +13,17 @@ BASE_URL = "http://localhost:8000/api/v1"
 DNS_QUERY_REGEX = re.compile(r"query from .*?: ([\w\.-]+)\.\s+[A-Z]+")
 scanned_domains_cache = set()
 
-def submit_to_ai(domain: str):
+def submit_to_ai(domain: str, is_main_target: bool = True):
     if domain in scanned_domains_cache:
         return
     scanned_domains_cache.add(domain)
     
+    start_time = datetime.datetime.now()
+    
     try:
         # 1. Login sebagai mesin
+        if is_main_target:
+            print(f"[{start_time.strftime('%H:%M:%S')}] 📡 Memeriksa domain tak dikenal: {domain}")
         r = httpx.post(f"{BASE_URL}/auth/login", json={"username": "admin", "password": "Admin123!"})
         if r.status_code != 200:
             return
@@ -41,7 +45,12 @@ def submit_to_ai(domain: str):
             return
             
         # 3. Eksekusi Stealth Scan & Machine Learning!
+        if is_main_target:
+            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🕵️  [+{(datetime.datetime.now() - start_time).seconds}s] Menyusup ke {domain} (Membypass Cloudflare/Anti-Bot)...")
         r_extract = httpx.post(f"{BASE_URL}/domains/{domain_id}/features/extract", headers=headers, timeout=60.0)
+        
+        if is_main_target:
+            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🧠 [+{(datetime.datetime.now() - start_time).seconds}s] Fitur diekstrak. Mengirim ke model AI Random Forest...")
         r_ml = httpx.post(f"{BASE_URL}/ml/predict/{domain_id}", headers=headers)
         
         # 3b. Auto-scan domain yang ditemukan dari aset halaman (gambar, script, iframe, dll)
@@ -52,7 +61,7 @@ def submit_to_ai(domain: str):
                 if ref_domains:
                     for ref_domain in ref_domains[:20]:  # Batasi 20 domain per halaman
                         if ref_domain not in scanned_domains_cache:
-                            threading.Thread(target=submit_to_ai, args=(ref_domain,), daemon=True).start()
+                            threading.Thread(target=submit_to_ai, args=(ref_domain, False), daemon=True).start()
             except Exception:
                 pass
         
@@ -63,10 +72,10 @@ def submit_to_ai(domain: str):
                 if isinstance(conf, float): conf = int(conf * 100)
                 
                 print(f"\n=======================================================")
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🚨 ANCAMAN JUDI ONLINE TERDETEKSI!")
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🚨 [+{(datetime.datetime.now() - start_time).seconds}s] ANCAMAN JUDI ONLINE TERDETEKSI!")
                 print(f"      📡 Target : {domain}")
                 print(f"      🛑 Vonis  : GAMBLING_INDICATED (Keyakinan: {conf}%)")
-                print(f"      🧱 Aksi   : Memblokir akses dari seluruh jaringan...")
+                print(f"      🧱 Aksi   : Memblokir akses DNS seketika (Time-to-Mitigate: {(datetime.datetime.now() - start_time).seconds} detik)")
                 
                 # 4. FOOTPRINTING: Buru seluruh keluarga domain judi ini!
                 try:
@@ -109,11 +118,15 @@ def run_syslog_listener():
                 match = DNS_QUERY_REGEX.search(log_message)
                 if match:
                     domain = match.group(1).lower()
-                    if domain.endswith(".local") or domain in ["google.com", "apple.com", "windows.com", "googleadservices.com"]:
+                    
+                    # Tambahkan LOG agar terlihat seperti lalu lintas jaringan sibuk (Matrix style)
+                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🟢 [TRAFIK NORMAL] User membuka -> {domain}")
+                    
+                    if domain.endswith(".local") or domain in ["google.com", "apple.com", "windows.com", "googleadservices.com", "cloudflare.com"]:
                         continue
                         
                     # Lempar ke thread baru agar radar tidak berhenti mendengarkan
-                    threading.Thread(target=submit_to_ai, args=(domain,), daemon=True).start()
+                    threading.Thread(target=submit_to_ai, args=(domain, True), daemon=True).start()
                     
     except KeyboardInterrupt:
         print("\n🛑 Mematikan sistem analisis jaringan...")

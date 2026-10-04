@@ -56,7 +56,8 @@ class MLService:
             "internal_links_count": 0,
             "suspicious_keyword_count": 0,
             "has_login_form": 0,
-            "has_register_form": 0
+            "has_register_form": 0,
+            "has_livechat_widget": 0
         }
         
         # 1. Get Infrastructure counts
@@ -89,6 +90,7 @@ class MLService:
             vector["suspicious_keyword_count"] = len(features.get("suspicious_keywords_found", []))
             vector["has_login_form"] = 1 if features.get("has_login_form") else 0
             vector["has_register_form"] = 1 if features.get("has_registration_form") else 0
+            vector["has_livechat_widget"] = 1 if features.get("has_livechat_widget") else 0
             
         return vector
 
@@ -141,6 +143,7 @@ class MLService:
                 "suspicious_keyword_count": np.zeros(legit_count),
                 "has_login_form": np.random.choice([0, 1], legit_count, p=[0.7, 0.3]),
                 "has_register_form": np.random.choice([0, 1], legit_count, p=[0.8, 0.2]),
+                "has_livechat_widget": np.random.choice([0, 1], legit_count, p=[0.9, 0.1]),
                 "label": 0
             })
             
@@ -154,6 +157,7 @@ class MLService:
                 "suspicious_keyword_count": np.random.randint(3, 15, gambling_count),
                 "has_login_form": np.random.choice([0, 1], gambling_count, p=[0.2, 0.8]),
                 "has_register_form": np.random.choice([0, 1], gambling_count, p=[0.1, 0.9]),
+                "has_livechat_widget": np.random.choice([0, 1], gambling_count, p=[0.1, 0.9]),
                 "label": 1
             })
             
@@ -171,6 +175,7 @@ class MLService:
                 "suspicious_keyword_count": np.zeros(50), 
                 "has_login_form": np.random.choice([0, 1], 50, p=[0.7, 0.3]),
                 "has_register_form": np.random.choice([0, 1], 50, p=[0.8, 0.2]),
+                "has_livechat_widget": np.random.choice([0, 1], 50, p=[0.9, 0.1]),
                 "label": 0
             })
             
@@ -183,6 +188,7 @@ class MLService:
                 "suspicious_keyword_count": np.random.randint(3, 15, 50),
                 "has_login_form": np.random.choice([0, 1], 50, p=[0.2, 0.8]),
                 "has_register_form": np.random.choice([0, 1], 50, p=[0.1, 0.9]),
+                "has_livechat_widget": np.random.choice([0, 1], 50, p=[0.1, 0.9]),
                 "label": 1
             })
             
@@ -253,6 +259,12 @@ class MLService:
         
         # Determine classification
         classification = "GAMBLING_INDICATED" if prediction == 1 else "LEGITIMATE"
+        
+        # Hard Rule Override (Clean Landing Page Evasion)
+        if vector.get("word_count", 0) < 100 and vector.get("has_livechat_widget") == 1 and vector.get("has_login_form") == 1:
+            classification = "GAMBLING_INDICATED"
+            confidence = max(confidence, 0.92)
+            logger.info("clean_landing_page_evasion_detected", domain_id=str(domain_id))
         
         # Determine risk level based on confidence
         risk_level = "LOW"

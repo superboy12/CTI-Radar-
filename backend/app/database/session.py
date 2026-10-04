@@ -21,14 +21,21 @@ if not is_sqlite:
         "max_overflow": 20,
     })
 
+if is_sqlite:
+    engine_kwargs.update({
+        "connect_args": {"timeout": 30.0}
+    })
+    
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
-# Enable foreign keys for SQLite
+# Enable foreign keys and WAL for SQLite
 if is_sqlite:
     @event.listens_for(engine.sync_engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.close()
 
 AsyncSessionLocal = async_sessionmaker(

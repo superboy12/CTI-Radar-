@@ -46,3 +46,17 @@ async def get_mikrotik_blocklist(
     service = MitigationService(db)
     content = await service.generate_mikrotik_script(include_suspicious)
     return Response(content=content, media_type="text/plain")
+
+@router.get("/blocklist/waf-nginx", response_class=Response)
+async def get_waf_blocklist(
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get a blocklist specifically formatted for Web Application Firewalls (WAF) or Nginx.
+    Used by universities/government servers to block outbound requests to gambling CDNs
+    and protect against Web Defacement / SEO Hijacking.
+    """
+    service = MitigationService(db)
+    # Ini akan memblokir Nginx agar tidak bisa memuat iframe/script dari domain hacker judi
+    content = await service.generate_hosts_file(include_suspicious=True) 
+    return Response(content=content, media_type="text/plain")

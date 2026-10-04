@@ -176,6 +176,17 @@ class FeatureExtractionService:
                 elif len(inputs) > 3 and "email" in input_types and "password" in input_types:
                     features.has_registration_form = True
 
+            # Look for LiveChat widgets
+            livechat_providers = ["tawk.to", "livechatinc", "smartsupp", "jivochat", "zopim", "crisp.chat", "tidio"]
+            for script in soup_full.find_all("script"):
+                src = script.get("src", "").lower()
+                text_content = script.string if script.string else ""
+                
+                for provider in livechat_providers:
+                    if provider in src or provider in text_content.lower():
+                        features.has_livechat_widget = True
+                        break
+
             # ============================================================
             # DEEP ASSET SCANNING — Membedah Seluruh Organ Situs Judi
             # ============================================================

@@ -15,6 +15,7 @@ class WebsiteFeatures(BaseModel):
     internal_links: List[str] = []
     has_login_form: bool = False
     has_registration_form: bool = False
+    has_livechat_widget: bool = False
     suspicious_keywords_found: List[str] = []
     server: Optional[str] = None
     status_code: Optional[int] = None

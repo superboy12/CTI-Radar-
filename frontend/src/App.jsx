@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { ShieldAlert, Activity, Globe, Shield, Search, Database } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import ThreatGraph from './ThreatGraph'
 
 const MOCK_STATS = {
   total_domains: 5,
@@ -179,6 +180,8 @@ function App() {
             </div>
           </motion.div>
         </div>
+
+        <ThreatGraph />
       </main>
     </div>
   )
