@@ -46,6 +46,46 @@ function StatCard({ title, value, icon: Icon, bgClass, textClass, delay }) {
 
 function App() {
   const [stats, setStats] = useState(MOCK_STATS)
+  const [recentDomains, setRecentDomains] = useState([])
+
+  // Fetch real data from backend
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = "dev-token-admin"; // using dev token
+        const headers = { "Authorization": `Bearer ${token}` };
+        
+        // Fetch stats
+        const statsRes = await fetch("http://localhost:8000/api/v1/domains/statistics", { headers });
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setStats(statsData);
+        }
+        
+        // Fetch recent domains
+        const domainsRes = await fetch("http://localhost:8000/api/v1/domains?page_size=10", { headers });
+        if (domainsRes.ok) {
+          const domainsData = await domainsRes.json();
+          const recent = domainsData.items.map(d => ({
+            domain: d.domain,
+            status: d.classification || d.status.toUpperCase(),
+            time: new Date(d.updated_at || d.created_at).toLocaleTimeString(),
+            color: d.classification === 'GAMBLING_INDICATED' ? 'text-red-500' 
+                   : d.classification === 'LEGITIMATE' ? 'text-green-500'
+                   : d.classification === 'SUSPICIOUS' ? 'text-yellow-500'
+                   : 'text-gray-500'
+          }));
+          setRecentDomains(recent);
+        }
+      } catch (e) {
+        console.error("Error fetching data:", e);
+      }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 3000); // refresh every 3 seconds
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-white p-8 font-sans">
@@ -105,7 +145,7 @@ function App() {
           />
           <StatCard 
             title="Suspicious / Risk" 
-            value={stats.classification.suspicious} 
+            value={stats.classification?.suspicious || 0} 
             icon={ShieldAlert} 
             bgClass="bg-yellow-500/20"
             textClass="text-yellow-400" 
@@ -113,7 +153,7 @@ function App() {
           />
           <StatCard 
             title="High Risk (Blocked)" 
-            value={stats.high_risk_domains} 
+            value={stats.classification?.gambling_indicated || stats.high_risk_domains} 
             icon={Shield} 
             bgClass="bg-red-500/20"
             textClass="text-red-400" 
@@ -158,25 +198,24 @@ function App() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.6 }}
-            className="bg-card border border-border rounded-2xl p-6 h-96"
+            className="bg-card border border-border rounded-2xl p-6 h-96 overflow-y-auto"
           >
             <h3 className="text-lg font-medium text-gray-300 mb-6">Recent Activity</h3>
             <div className="space-y-4">
-              {[
-                { domain: 'google.com', status: 'LEGITIMATE', time: '10 mins ago', color: 'text-green-500' },
-                { domain: 'suspicious-test.xyz', status: 'SUSPICIOUS', time: '1 hr ago', color: 'text-yellow-500' },
-                { domain: 'test1.com', status: 'PENDING', time: '2 hrs ago', color: 'text-gray-500' },
-              ].map((item, i) => (
+              {recentDomains.map((item, i) => (
                 <div key={i} className="flex items-center justify-between border-b border-border/50 pb-4 last:border-0">
                   <div>
-                    <p className="font-medium">{item.domain}</p>
+                    <p className="font-medium max-w-[150px] truncate" title={item.domain}>{item.domain}</p>
                     <p className="text-xs text-gray-500">{item.time}</p>
                   </div>
-                  <span className={`text-xs font-bold px-2 py-1 rounded bg-background border border-border ${item.color}`}>
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded bg-background border border-border ${item.color}`}>
                     {item.status}
                   </span>
                 </div>
               ))}
+              {recentDomains.length === 0 && (
+                 <p className="text-gray-500 text-sm text-center">No recent activity.</p>
+              )}
             </div>
           </motion.div>
         </div>

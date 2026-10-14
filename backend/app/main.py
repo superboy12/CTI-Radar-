@@ -61,6 +61,8 @@ app = FastAPI(
     redoc_url="/redoc" if settings.is_development else None,
 )
 
+from fastapi.staticfiles import StaticFiles
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -69,6 +71,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve Screenshots Directory
+import os
+screenshots_path = os.path.join(os.getcwd(), "screenshots")
+os.makedirs(screenshots_path, exist_ok=True)
+app.mount("/screenshots", StaticFiles(directory=screenshots_path), name="screenshots")
 
 # Include API routes
 app.include_router(api_router)

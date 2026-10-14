@@ -30,13 +30,20 @@ def submit_to_ai(domain: str, is_main_target: bool = True):
         
         headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
         
-        # 2. Masukkan ke Antrean
+        # 2. Masukkan ke Antrean / Cek Database
         r = httpx.post(f"{BASE_URL}/domains/analyze", json={"domain": domain, "source": "NTA_Syslog"}, headers=headers)
         if r.status_code == 409:
-            # Fetch ID
+            # Domain sudah ada di database, mari kita cek statusnya
             r_get = httpx.get(f"{BASE_URL}/domains?search={domain}", headers=headers)
             if r_get.status_code == 200 and r_get.json()["items"]:
-                domain_id = r_get.json()["items"][0]["id"]
+                domain_data = r_get.json()["items"][0]
+                domain_id = domain_data["id"]
+                
+                # JIKA SUDAH PERNAH DIVONIS JUDI, JANGAN DI-SCAN ULANG!
+                if domain_data.get("classification") == "GAMBLING_INDICATED":
+                    if is_main_target:
+                        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ⚡ [CACHE HIT] {domain} sudah ada di Blocklist. Melewati proses AI...")
+                    return
             else:
                 return
         elif r.status_code == 201:
